@@ -1,4 +1,14 @@
+# ==============================================================================
+# ADDMAI Development & Testing Requirements
+# ==============================================================================
+# Development and testing dependencies. Install via:
+#   pip install -r requirements-dev.txt
+# Or via pip with optional dependencies:
+#   pip install -e .[dev]
+
 -r requirements.txt
+
+# Testing & Code Quality Tools
 pytest>=8.1.0
 pytest-asyncio>=0.23.5
 pytest-cov>=4.1.0

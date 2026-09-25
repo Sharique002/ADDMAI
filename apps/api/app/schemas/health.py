@@ -1,47 +1,22 @@
-"""Health and readiness response schemas."""
+"""Health and readiness response schemas conforming to Sections 4, 5, 9 of Stage 1/1.1."""
 
-from typing import Any, Dict
-
-try:
-    from pydantic import BaseModel, Field
-    HAS_PYDANTIC = True
-except ImportError:  # pragma: no cover
-    HAS_PYDANTIC = False
+from typing import Dict
+from pydantic import BaseModel, Field
 
 
-if HAS_PYDANTIC:
-    class HealthResponse(BaseModel):
-        """Liveness health response schema matching Stage 1 specification."""
-        status: str = Field(default="healthy", description="Application liveness status")
+class HealthResponse(BaseModel):
+    """Liveness health response schema: HTTP 200 with {'status': 'healthy'}."""
+    status: str = Field(default="healthy", description="Application liveness status")
 
-    class DependencyStatus(BaseModel):
-        """Individual downstream dependency status."""
-        configured: bool = Field(..., description="Whether the dependency has connection configuration")
-        status: str = Field(..., description="Connectivity status of the dependency: ready, not_ready, or pending")
 
-    class ReadyResponse(BaseModel):
-        """Readiness probe response schema."""
-        status: str = Field(..., description="Overall readiness status: ready or not_ready")
-        dependencies: Dict[str, Any] = Field(..., description="Map of infrastructure dependencies")
-        timestamp: str = Field(..., description="ISO 8601 UTC timestamp of check")
+class DependencyDetail(BaseModel):
+    """Sanitized individual downstream dependency status (no credentials or hosts)."""
+    configured: bool = Field(..., description="Whether connection configuration is defined")
+    status: str = Field(..., description="Readiness status of dependency: ready or not_ready")
 
-else:  # Fallback dataclass representations
-    class HealthResponse:  # type: ignore
-        def __init__(self, status: str = "healthy") -> None:
-            self.status = status
 
-        def dict(self) -> Dict[str, Any]:
-            return {"status": self.status}
-
-    class ReadyResponse:  # type: ignore
-        def __init__(self, status: str, dependencies: Dict[str, Any], timestamp: str) -> None:
-            self.status = status
-            self.dependencies = dependencies
-            self.timestamp = timestamp
-
-        def dict(self) -> Dict[str, Any]:
-            return {
-                "status": self.status,
-                "dependencies": self.dependencies,
-                "timestamp": self.timestamp,
-            }
+class ReadyResponse(BaseModel):
+    """Readiness probe response schema indicating overall system readiness."""
+    status: str = Field(..., description="Overall readiness: ready or not_ready")
+    dependencies: Dict[str, DependencyDetail] = Field(..., description="Map of infrastructure dependencies")
+    timestamp: str = Field(..., description="ISO 8601 UTC timestamp of inspection")

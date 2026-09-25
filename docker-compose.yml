@@ -1,5 +1,11 @@
 version: '3.8'
 
+# ==============================================================================
+# ADDMAI Development Infrastructure Stack (Stage 1.1 Hardened)
+# ==============================================================================
+# Notice: Container images use pinned tags to eliminate environment drift.
+# Internal communication uses container service names via the dedicated 'addmai-network'.
+
 networks:
   addmai-network:
     name: addmai-network
@@ -67,7 +73,8 @@ services:
   # 3. PostgreSQL Database (Relational metadata, audit logs)
   # ==============================================================================
   postgres:
-    image: postgres:16-alpine
+    # Pinned to 16.2-alpine to prevent unexpected minor version drift
+    image: postgres:16.2-alpine
     container_name: addmai-postgres
     restart: unless-stopped
     ports:
@@ -90,7 +97,8 @@ services:
   # 4. Redis (Task queue broker, cache)
   # ==============================================================================
   redis:
-    image: redis:7-alpine
+    # Pinned to 7.2.4-alpine to ensure reproducible queue behavior
+    image: redis:7.2.4-alpine
     container_name: addmai-redis
     restart: unless-stopped
     ports:
@@ -110,7 +118,8 @@ services:
   # 5. MinIO (S3-compatible Object Storage for media assets)
   # ==============================================================================
   minio:
-    image: minio/minio:latest
+    # Pinned release (no :latest) to prevent breaking API changes
+    image: minio/minio:RELEASE.2024-03-30T09-41-56Z
     container_name: addmai-minio
     restart: unless-stopped
     ports:

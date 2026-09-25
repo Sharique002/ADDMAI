@@ -83,6 +83,8 @@ flowchart TD
 - **Request Identification:** Emits and tracks `X-Request-ID` across every HTTP request and downstream worker task.
 - **Error Standards:** Conforms to RFC-7807 (Problem Details for HTTP APIs).
 - **Separation Rule:** Zero machine learning, OpenCV manipulation, or direct SQL execution within route handlers.
+- **Service Layer Abstraction:** Route handlers (`apps/api/app/api/v1/health.py`) remain thin HTTP translation wrappers, delegating dependency inspection and readiness evaluation to dedicated domain services (`apps/api/app/services/health.py`).
+- **Truthful Readiness Semantics:** The `/api/v1/ready` endpoint evaluates real TCP connectivity against PostgreSQL, Redis, and MinIO. It returns `HTTP 200` only when all configured services are reachable and returns `HTTP 503` if any service is down, without leaking credentials or internal URIs.
 
 ### 3.3 Persistence Layer
 1. **PostgreSQL 16:**

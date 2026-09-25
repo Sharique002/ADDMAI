@@ -1,11 +1,12 @@
-# ADDMAI Web Frontend Dockerfile (Stage 1)
-FROM node:20-alpine
+# ADDMAI Web Frontend Dockerfile (Stage 1.1 Hardened)
+# Pinned to specific Node release to eliminate environment drift
+FROM node:20.12.2-alpine
 
 WORKDIR /app
 
 # Install dependencies
-COPY apps/web/package.json ./
-RUN npm install
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci
 
 # Copy frontend source code
 COPY apps/web/ ./

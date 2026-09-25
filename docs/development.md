@@ -1,9 +1,9 @@
-# ADDMAI Development Guide (Stage 1)
+# ADDMAI Development Guide (Stage 1.1 Hardened)
 
-This guide provides instructions for setting up, running, and verifying the **ADDMAI** development environment.
+This guide provides instructions for setting up, running, testing, and verifying the **ADDMAI** development environment.
 
 > [!NOTE]
-> **Stage 1 Scope:** This guide covers repository layout, local infrastructure (Docker Compose), backend API foundations, and frontend shell development. Deepfake AI models, media ingestion pipelines, and forensic algorithms will be introduced in subsequent stages.
+> **Stage 1.1 Scope:** This guide covers repository layout, local infrastructure (Docker Compose), backend API foundations, dependency strategies, and frontend shell development. Deepfake AI models, media ingestion pipelines, and forensic algorithms will be introduced in subsequent stages.
 
 ---
 
@@ -11,23 +11,70 @@ This guide provides instructions for setting up, running, and verifying the **AD
 
 Before running the platform, ensure the following tooling is installed:
 
-- **Python:** 3.11 or higher
+- **Python:** 3.11 or higher (3.11.9 recommended)
 - **Node.js:** v18.0 or higher (v20+ recommended) with `npm`
 - **Docker & Docker Compose:** v2.20+ (for containerized stack execution)
 - **Git:** Version 2.40+
 
 ---
 
-## 2. Repository Layout
+## 2. Dependency Management Strategy
+
+ADDMAI enforces a clear source-of-truth hierarchy across dependency files:
+
+1. **`pyproject.toml` (Authoritative):**
+   - The single authoritative source for project metadata, Python version constraints (`>=3.11`), core runtime dependencies, and development tools.
+2. **`requirements.txt` (Production & Docker):**
+   - Derived directly from `pyproject.toml`. Maintained for container build compatibility (`apps/api/Dockerfile`) and standard deployment environments.
+3. **`requirements-dev.txt` (Local Development):**
+   - References `requirements.txt` and adds developer test harnesses (`pytest`, `ruff`, `pytest-cov`).
+
+### Local Python Environment Setup
+```bash
+python -m venv .venv
+# Activate on Windows:
+.venv\Scripts\Activate.ps1
+# Activate on Linux/macOS:
+source .venv/bin/activate
+
+# Install dependencies:
+pip install -r requirements-dev.txt
+# Or in editable mode via pyproject:
+pip install -e .[dev]
+```
+
+---
+
+## 3. Environment & Credential Policy
+
+### Development vs Production Credentials
+- **Development Mode (`APP_ENV=development`):**
+  - Safe, local development defaults are provided (e.g., `addmai_dev_password` and `minioadmin`).
+  - Marked clearly in `.env.example` as `DEVELOPMENT ONLY`.
+- **Production Mode (`APP_ENV=production`):**
+  - The application strictly refuses to start if default development passwords or MinIO keys are detected.
+  - Explicit, unique, cryptographically strong credentials must be provided.
+- **CORS Security:**
+  - Wildcard origin (`*`) is strictly rejected across all environments. Explicit origins must be declared in `CORS_ALLOWED_ORIGINS`.
+
+---
+
+## 4. Repository Layout
 
 ```
 ADDMAI/
 ├── apps/
 │   ├── api/             # FastAPI backend service
-│   │   ├── app/         # Application modules (api, core, schemas)
-│   │   └── tests/       # Backend unit test suite
+│   │   ├── app/         # Application modules (api, core, schemas, services)
+│   │   │   ├── api/v1/health.py    # Thin HTTP route definitions
+│   │   │   ├── services/health.py  # Decoupled dependency readiness logic
+│   │   │   ├── core/config.py      # Hardened Pydantic settings
+│   │   │   └── main.py             # FastAPI entrypoint
+│   │   ├── tests/       # Backend unit test suite
+│   │   └── Dockerfile   # Pinned Python 3.11.9-slim container
 │   └── web/             # React + TypeScript frontend dashboard
-│       └── src/         # UI components & apiService abstraction
+│       ├── src/         # UI components & apiService abstraction
+│       └── Dockerfile   # Pinned Node 20.12.2-alpine container
 ├── ml/                  # Machine learning models (Stage 3 & 4)
 ├── forensic/            # Forensic signal extractors (Stage 5)
 ├── provenance/          # C2PA provenance parser (Stage 5)
@@ -37,50 +84,30 @@ ADDMAI/
 ├── infra/               # Deployment and container orchestration manifests
 ├── scripts/             # Developer automation utilities
 ├── docs/                # Architecture and design documentation
-├── docker-compose.yml   # Multi-service development stack
+├── docker-compose.yml   # Multi-service development stack (pinned versions)
 ├── Makefile             # Automation commands
-├── pyproject.toml       # Python package configuration
+├── pyproject.toml       # Python package configuration (Authoritative)
 └── README.md            # Project introduction and roadmap status
 ```
 
 ---
 
-## 3. Environment Configuration
-
-1. Copy the environment configuration template:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Review the configured variables in `.env`:
-
-| Variable | Default Value | Description |
-| :--- | :--- | :--- |
-| `APP_NAME` | `"ADDMAI API"` | Backend service name |
-| `APP_ENV` | `development` | Environment mode (`development`, `testing`, `production`) |
-| `API_PORT` | `8000` | Host port for FastAPI REST API |
-| `FRONTEND_PORT` | `5173` | Host port for React Vite dev server |
-| `DATABASE_URL` | `postgresql+asyncpg://...` | Connection URI for PostgreSQL 16 |
-| `REDIS_URL` | `redis://localhost:6379/0` | Connection URI for Redis task broker |
-| `MINIO_ENDPOINT` | `http://localhost:9000` | S3 API endpoint for MinIO object storage |
-| `MINIO_CONSOLE_URL` | `http://localhost:9001` | Browser console for MinIO management |
-| `CORS_ALLOWED_ORIGINS` | `["http://localhost:5173"]` | Explicit CORS allowed origins (no wildcard `*`) |
-
----
-
-## 4. Running the Application
+## 5. Running the Application
 
 ### Option A: Complete Docker Compose Stack
 To start all 5 services simultaneously:
 ```bash
 docker compose up -d
 ```
+All container images are pinned to specific version tags to eliminate unexpected environment drift:
+- `postgres:16.2-alpine`
+- `redis:7.2.4-alpine`
+- `minio/minio:RELEASE.2024-03-30T09-41-56Z`
 
 Verify service status:
 ```bash
 docker compose ps
 ```
-
 To stop the stack:
 ```bash
 docker compose down
@@ -108,10 +135,22 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## 5. Testing & Verification
+## 6. Health & Truthful Readiness Semantics
+
+- **Liveness Probe (`GET /api/v1/health`):**
+  - Always returns `HTTP 200` with `{"status": "healthy"}` if the FastAPI process is responsive.
+- **Readiness Probe (`GET /api/v1/ready`):**
+  - Performs active TCP connectivity verification against PostgreSQL (`5432`), Redis (`6379`), and MinIO (`9000`).
+  - Returns `HTTP 200` with `"status": "ready"` **only** if all configured dependencies are reachable.
+  - Returns `HTTP 503` with `"status": "not_ready"` if any dependency is unreachable or malformed.
+  - Never falsely reports "ready" due to environment flags.
+
+---
+
+## 7. Testing & Verification
 
 ### Running Automated Backend Tests
-Run the unit test suite:
+Run all unit and API test suites:
 ```bash
 python -m unittest discover -s apps/api/tests
 python -m unittest discover -s tests
@@ -130,7 +169,7 @@ npm run build
 
 ---
 
-## 6. Service Ports Reference
+## 8. Service Ports Reference
 
 | Service | Internal Port | Host Port | Protocol | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
@@ -140,18 +179,3 @@ npm run build
 | **Redis** | `6379` | `6379` | TCP | Task queue broker & state cache |
 | **MinIO API** | `9000` | `9000` | HTTP | S3 Object storage API |
 | **MinIO Console** | `9001` | `9001` | HTTP | Web storage management UI |
-
----
-
-## 7. Troubleshooting Common Problems
-
-1. **Port Conflicts (`Address already in use`):**
-   - Check if existing services are listening on 8000, 5432, 6379, or 9000 using `netstat -ano` (Windows) or `lsof -i :<port>` (macOS/Linux).
-   - Change the port mappings in `.env` (e.g. `API_PORT=8001`).
-
-2. **Readiness Probe Reports `not_ready`:**
-   - In development mode (`APP_ENV=development`), the `/api/v1/ready` probe verifies TCP connectivity to PostgreSQL, Redis, and MinIO. If the external Docker containers are not running, this is expected behavior.
-   - For isolated test runs, ensure `APP_ENV=testing` is set.
-
-3. **CORS Errors in Browser:**
-   - Verify `CORS_ALLOWED_ORIGINS` in `.env` includes the origin where your frontend is running (default: `http://localhost:5173`). Wildcard `*` is prohibited for security compliance.

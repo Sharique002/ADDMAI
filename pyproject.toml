@@ -11,17 +11,20 @@ requires-python = ">=3.11"
 authors = [
     { name = "ADDMAI Engineering Team" }
 ]
+# Authoritative project dependencies (Stage 1 & reserved baseline)
 dependencies = [
+    # Actively used in Stage 1/1.1 foundation:
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.28.0",
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",
+    "httpx>=0.27.0",
+    # Reserved dependencies for upcoming stages (Stage 2 Storage, Stage 3 Database, Stage 8 Workers):
     "sqlalchemy[asyncio]>=2.0.28",
     "asyncpg>=0.29.0",
     "redis>=5.0.2",
     "aioboto3>=12.3.0",
-    "python-multipart>=0.0.9",
-    "httpx>=0.27.0"
+    "python-multipart>=0.0.9"
 ]
 
 [project.optional-dependencies]
@@ -34,9 +37,9 @@ dev = [
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = ["tests"]
+testpaths = ["apps/api/tests", "tests"]
 asyncio_mode = "auto"
-pythonpath = ["backend"]
+pythonpath = ["apps/api"]
 filterwarnings = [
     "ignore::DeprecationWarning"
 ]

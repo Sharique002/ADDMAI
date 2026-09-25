@@ -2,7 +2,7 @@
 
 **AI-Powered Deepfake Detection & Media Authenticity Intelligence**
 
-[![Stage](https://img.shields.io/badge/Stage-1%3A%20Infrastructure-blue.svg)](#)
+[![Stage](https://img.shields.io/badge/Stage-1.1%3A%20Foundation%20Hardened-blue.svg)](#)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)](#)
 
 ---
@@ -21,65 +21,66 @@
 
 ---
 
-## 2. Current Status: Stage 1
+## 2. Current Status: Stage 1.1 (Foundation Hardening)
 
-The project is currently at **Stage 1 — Repository & Development Infrastructure**.
+The project has achieved **Stage 1.1 — Foundation Hardening**.
 
 > [!IMPORTANT]
-> **Stage 1 Scope:** This stage establishes the local development environment, containerized infrastructure, backend API foundations, and frontend application shell.
+> **Stage 1.1 Scope:** Hardens Python packaging consistency, truthful health/readiness semantics, Pydantic typed settings validation, pinned Docker reproducibility, and security utilities.
 > **No deepfake models, video/audio extraction pipelines, database schemas, or forensic algorithms are implemented yet.** Those belong to subsequent stages.
 
 ---
 
 ## 3. Technology Foundation
 
-- **Backend:** Python 3.11+, FastAPI, Pydantic v2
-- **Frontend:** React 18, TypeScript 5, Vite
-- **Database:** PostgreSQL 16
-- **Task Queue & Cache:** Redis 7
-- **Object Storage:** MinIO (local S3-compatible)
-- **Containerization:** Docker, Docker Compose
+- **Backend:** Python 3.11+ (Pinned container: `python:3.11.9-slim`), FastAPI, Pydantic v2
+- **Frontend:** React 18, TypeScript 5, Vite (Pinned container: `node:20.12.2-alpine`)
+- **Database:** PostgreSQL 16 (Pinned container: `postgres:16.2-alpine`)
+- **Task Queue & Cache:** Redis 7 (Pinned container: `redis:7.2.4-alpine`)
+- **Object Storage:** MinIO (Pinned container: `minio/minio:RELEASE.2024-03-30T09-41-56Z`)
 - **Testing:** Python `unittest` / `pytest`
 
 ---
 
 ## 4. Prerequisites
 
-- Python 3.11+
+- Python 3.11+ (3.11.9 recommended)
 - Node.js v18+ & npm
-- Docker & Docker Compose (optional for containerized stack)
+- Docker & Docker Compose (for containerized stack execution)
 - Git
 
 ---
 
-## 5. Local Environment Setup
+## 5. Dependency Management Strategy
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Sharique002/ADDMAI.git
-   cd ADDMAI
-   ```
+- **`pyproject.toml` (Authoritative):** Single source of truth for dependencies, Python version (`>=3.11`), and test runner paths.
+- **`requirements.txt` (Docker & Production):** Maintained for reproducible container builds and production deployments.
+- **`requirements-dev.txt` (Local Dev):** Development test harnesses (`pytest`, `ruff`, `pytest-cov`).
 
-2. **Configure Environment Variables:**
-   ```bash
-   cp .env.example .env
-   ```
+### Local Environment Setup:
+```bash
+git clone https://github.com/Sharique002/ADDMAI.git
+cd ADDMAI
+cp .env.example .env
 
-3. **Install Frontend Dependencies:**
-   ```bash
-   cd apps/web
-   npm install
-   cd ../..
-   ```
+# Install backend dependencies:
+pip install -r requirements-dev.txt
+
+# Install frontend dependencies:
+cd apps/web
+npm install
+cd ../..
+```
 
 ---
 
 ## 6. Starting the Stack Locally
 
-### Option A: Docker Compose (All Services)
+### Option A: Complete Docker Compose Stack
 ```bash
 docker compose up -d
 ```
+All container images are pinned to specific version tags to eliminate unexpected environment drift.
 To view logs:
 ```bash
 docker compose logs -f
@@ -117,7 +118,7 @@ docker compose down
 
 ---
 
-## 8. Health & Verification Endpoints
+## 8. Health & Truthful Verification Endpoints
 
 - **Liveness Probe:**
   ```http
@@ -130,11 +131,14 @@ docker compose down
   }
   ```
 
-- **Readiness Probe:**
+- **Truthful Readiness Probe:**
   ```http
   GET http://localhost:8000/api/v1/ready
   ```
-  Returns readiness status of configured infrastructure dependencies (PostgreSQL, Redis, MinIO).
+  Actively probes PostgreSQL, Redis, and MinIO connectivity via TCP.
+  - Returns `HTTP 200` with `"status": "ready"` when all configured infrastructure dependencies are reachable.
+  - Returns `HTTP 503` with `"status": "not_ready"` if any dependency is unreachable or malformed.
+  - Never leaks passwords, credentials, or internal URIs.
 
 - **Interactive Documentation:**
   `http://localhost:8000/api/v1/docs`
