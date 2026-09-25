@@ -1,0 +1,139 @@
+version: '3.8'
+
+networks:
+  addmai-network:
+    name: addmai-network
+    driver: bridge
+
+services:
+  # ==============================================================================
+  # 1. Backend REST API Gateway
+  # ==============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: addmai-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - APP_NAME=ADDMAI API
+      - APP_ENV=${APP_ENV:-development}
+      - APP_VERSION=0.1.0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-addmai}:${POSTGRES_PASSWORD:-addmai_dev_password}@postgres:5432/${POSTGRES_DB:-addmai}
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-addmai-uploads}
+      - CORS_ALLOWED_ORIGINS=["http://localhost:5173","http://localhost:3000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - addmai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ==============================================================================
+  # 2. Frontend React + TypeScript Dashboard Shell
+  # ==============================================================================
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: addmai-web
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:${API_PORT:-8000}
+    depends_on:
+      - api
+    networks:
+      - addmai-network
+
+  # ==============================================================================
+  # 3. PostgreSQL Database (Relational metadata, audit logs)
+  # ==============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: addmai-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-addmai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-addmai_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-addmai}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - addmai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-addmai} -d ${POSTGRES_DB:-addmai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==============================================================================
+  # 4. Redis (Task queue broker, cache)
+  # ==============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: addmai-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - addmai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==============================================================================
+  # 5. MinIO (S3-compatible Object Storage for media assets)
+  # ==============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: addmai-minio
+    restart: unless-stopped
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - addmai-network
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  minio-data:
+    driver: local

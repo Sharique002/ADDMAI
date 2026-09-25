@@ -2,63 +2,163 @@
 
 **AI-Powered Deepfake Detection & Media Authenticity Intelligence**
 
-[![Stage](https://img.shields.io/badge/Stage-0%3A%20Constitution-blue.svg)](#)
+[![Stage](https://img.shields.io/badge/Stage-1%3A%20Infrastructure-blue.svg)](#)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)](#)
 
 ---
 
-## Overview
+## 1. Project Overview
 
-ADDMAI is an engineering platform designed for robust, explainable media authenticity analysis. Rather than relying on a single deepfake classification model, ADDMAI treats media verification as a multi-signal forensic discipline by synthesizing:
+**ADDMAI** is a production-oriented AI-assisted media authenticity analysis platform. Rather than reducing verification to an error-prone binary classifier (`Media -> AI Model -> REAL/FAKE`), ADDMAI synthesizes multiple independent forensic evidence channels:
 
-1. **AI Detection:** Deep learning facial manipulation detection
-2. **Temporal Consistency:** Inter-frame continuity and physiological coherence
-3. **Forensic Signals:** Compression anomalies, frequency domain analysis, and blending artifacts
-4. **Metadata & Container Inspection:** File structure and camera/encoding profile validation
-5. **Cryptographic Integrity:** Immutable SHA-256 byte tracking
-6. **Provenance:** C2PA / Content Authenticity Initiative credential verification (when available)
-7. **Evidence Fusion:** Deterministic, multi-evidence synthesis capable of resolving conflicting signals
-
----
-
-## Project Status: Stage 0
-
-The project is currently at **Stage 0 — Project Constitution & Engineering Rules**.
-
-In accordance with strict stage-by-stage engineering boundaries:
-- Application functionality, models, and databases are deliberately deferred to subsequent stages.
-- Core architectural standards, trust models, security boundaries, and evaluation protocols have been ratified.
-
-The foundational project constitution is documented in:
-📄 **[`docs/project-constitution.md`](docs/project-constitution.md)**
+1. **AI Face Manipulation Detection:** Convolutional & vision transformer inference
+2. **Temporal Consistency Analysis:** Inter-frame continuity, landmark stability, and blink cadence
+3. **Media Forensic Signals:** Error Level Analysis (ELA), frequency artifacts (FFT), double quantization
+4. **Metadata & Container Inspection:** Encoding profiles, EXIF integrity, container structures
+5. **Cryptographic Integrity:** Immutable SHA-256 byte digest tracking
+6. **Content Provenance:** C2PA / Content Authenticity Initiative signed assertion validation
+7. **Deterministic Evidence Fusion:** Transparent evidence synthesis resolving contradictory signals into explainable assessments (`LIKELY_AUTHENTIC`, `LIKELY_MANIPULATED`, or `INCONCLUSIVE`)
 
 ---
 
-## Core Trust Model & Terminology
+## 2. Current Status: Stage 1
 
-ADDMAI distinguishes strictly between machine learning inference and final platform assessments:
+The project is currently at **Stage 1 — Repository & Development Infrastructure**.
 
-- **Model Prediction:** `REAL` or `DEEPFAKE` (raw statistical inference)
-- **Final System Assessment:** `LIKELY_AUTHENTIC`, `LIKELY_MANIPULATED`, or `INCONCLUSIVE`
-
-> Absolute claims (e.g. *"100% Authentic"*, *"Guaranteed Fake"*) are strictly prohibited unless presenting externally verified cryptographic proofs. The absence of provenance metadata never implies manipulation.
-
----
-
-## Technology Roadmap
-
-- **Frontend:** React, TypeScript, Tailwind CSS
-- **Backend:** Python (FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic)
-- **Storage & State:** PostgreSQL, Redis, MinIO / S3-compatible storage
-- **AI / Computer Vision:** PyTorch, OpenCV, NumPy, scikit-learn
-- **Infrastructure & Monitoring:** Docker, Docker Compose, Prometheus, Grafana
+> [!IMPORTANT]
+> **Stage 1 Scope:** This stage establishes the local development environment, containerized infrastructure, backend API foundations, and frontend application shell.
+> **No deepfake models, video/audio extraction pipelines, database schemas, or forensic algorithms are implemented yet.** Those belong to subsequent stages.
 
 ---
 
-## Engineering Rules
+## 3. Technology Foundation
 
-All project contributors and automation agents must adhere to the 32 principles specified in the [Project Constitution](docs/project-constitution.md), including:
-- **Modular Isolation:** Zero business or ML logic in HTTP presentation layers.
-- **Strict Data Partitioning:** Video-level and identity-level separation to eliminate data leakage.
-- **Security by Design:** All media uploads are treated as hostile, untrusted inputs.
-- **Transparent Fusion:** Deterministic evidence synthesis handling signal conflict gracefully.
+- **Backend:** Python 3.11+, FastAPI, Pydantic v2
+- **Frontend:** React 18, TypeScript 5, Vite
+- **Database:** PostgreSQL 16
+- **Task Queue & Cache:** Redis 7
+- **Object Storage:** MinIO (local S3-compatible)
+- **Containerization:** Docker, Docker Compose
+- **Testing:** Python `unittest` / `pytest`
+
+---
+
+## 4. Prerequisites
+
+- Python 3.11+
+- Node.js v18+ & npm
+- Docker & Docker Compose (optional for containerized stack)
+- Git
+
+---
+
+## 5. Local Environment Setup
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Sharique002/ADDMAI.git
+   cd ADDMAI
+   ```
+
+2. **Configure Environment Variables:**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Install Frontend Dependencies:**
+   ```bash
+   cd apps/web
+   npm install
+   cd ../..
+   ```
+
+---
+
+## 6. Starting the Stack Locally
+
+### Option A: Docker Compose (All Services)
+```bash
+docker compose up -d
+```
+To view logs:
+```bash
+docker compose logs -f
+```
+To stop containers:
+```bash
+docker compose down
+```
+
+### Option B: Native Execution
+
+1. **Start FastAPI Backend:**
+   ```bash
+   python -m uvicorn app.main:app --app-dir apps/api --reload --port 8000
+   ```
+
+2. **Start React Frontend:**
+   ```bash
+   cd apps/web
+   npm run dev
+   ```
+
+---
+
+## 7. Service Ports Reference
+
+| Service | Host Port | Protocol | Purpose |
+| :--- | :--- | :--- | :--- |
+| **API Gateway** | `8000` | HTTP | FastAPI REST endpoints & Swagger docs |
+| **Web Frontend** | `5173` | HTTP | React + TypeScript Dashboard |
+| **PostgreSQL** | `5432` | TCP | Relational metadata persistence |
+| **Redis** | `6379` | TCP | Task queue broker & state cache |
+| **MinIO API** | `9000` | HTTP | S3-compatible object storage API |
+| **MinIO Console** | `9001` | HTTP | Web management console for MinIO |
+
+---
+
+## 8. Health & Verification Endpoints
+
+- **Liveness Probe:**
+  ```http
+  GET http://localhost:8000/api/v1/health
+  ```
+  Returns `HTTP 200`:
+  ```json
+  {
+    "status": "healthy"
+  }
+  ```
+
+- **Readiness Probe:**
+  ```http
+  GET http://localhost:8000/api/v1/ready
+  ```
+  Returns readiness status of configured infrastructure dependencies (PostgreSQL, Redis, MinIO).
+
+- **Interactive Documentation:**
+  `http://localhost:8000/api/v1/docs`
+
+---
+
+## 9. Testing Instructions
+
+### Run Backend Unit Tests:
+```bash
+python -m unittest discover -s apps/api/tests
+python -m unittest discover -s tests
+```
+
+### Run Frontend Typecheck & Build:
+```bash
+cd apps/web
+npm run build
+```
+
+---
+
+## 10. Repository Documentation Index
+
+- [Project Constitution & Principles](docs/project-constitution.md)
+- [System Architecture](docs/architecture.md)
+- [Developer Onboarding & Troubleshooting Guide](docs/development.md)
