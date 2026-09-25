@@ -28,7 +28,18 @@ from app.schemas.media import (
     MediaIngestionResponse,
     MediaResponse,
 )
+from app.schemas.prediction import ModelPredictionResponse
+from app.services.detection import (
+    DetectionError,
+    IntegrityVerificationError,
+    MediaNotFoundError,
+    StorageObjectNotFoundError,
+    UnsupportedMediaCategoryError,
+    detection_service,
+)
 from app.services.media_ingestion import media_ingestion_service
+from ml.inference.model_loader import ModelSecurityError
+from ml.preprocessing.preprocessor import PreprocessingError
 
 logger = logging.getLogger("addmai.api.media")
 
@@ -247,3 +258,80 @@ async def get_media_record(
         is_duplicate=False,
         analysis=analysis,
     )
+
+
+@router.post(
+    "/{media_id}/detect",
+    response_model=ModelPredictionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Execute AI deepfake detection model on media asset (Stage 3)",
+    description="Retrieve canonical media asset, execute deterministic preprocessing and AI inference, and return structured model prediction.",
+    responses={
+        200: {"model": ModelPredictionResponse, "description": "AI model prediction computed successfully"},
+        404: {"model": MediaErrorResponse, "description": "Media not found"},
+        415: {"model": MediaErrorResponse, "description": "Unsupported media category for detection (e.g. video in Stage 3)"},
+        422: {"model": MediaErrorResponse, "description": "Malformed or unprocessable media content"},
+        500: {"model": MediaErrorResponse, "description": "Internal model, storage, or integrity error"},
+    },
+)
+async def detect_media(
+    request: Request,
+    media_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Execute AI deepfake detection on a canonical media asset (Section 16 & 17)."""
+    try:
+        prediction_resp = await detection_service.detect(media_id, db)
+        return prediction_resp
+    except MediaNotFoundError as err:
+        return _build_error_response(
+            request,
+            status.HTTP_404_NOT_FOUND,
+            "media-not-found",
+            "Media Not Found",
+            str(err),
+        )
+    except UnsupportedMediaCategoryError as err:
+        return _build_error_response(
+            request,
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            "unsupported-media-type",
+            "Unsupported Media Type for AI Detection",
+            str(err),
+        )
+    except PreprocessingError as err:
+        return _build_error_response(
+            request,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "malformed-media-content",
+            "Malformed Media Content",
+            f"Media asset could not be preprocessed for inference: {str(err)}",
+        )
+    except (StorageObjectNotFoundError, IntegrityVerificationError) as err:
+        logger.error(f"Integrity/storage failure during detection on media '{media_id}': {err}")
+        return _build_error_response(
+            request,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "storage-integrity-error",
+            "Storage Integrity Failure",
+            str(err),
+        )
+    except ModelSecurityError as err:
+        logger.error(f"Model security failure during detection on media '{media_id}': {err}")
+        return _build_error_response(
+            request,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "model-security-error",
+            "Model Security Failure",
+            "The detection model could not be loaded due to an artifact security or configuration error.",
+        )
+    except Exception as exc:
+        logger.error(f"Unexpected internal failure during detection on media '{media_id}': {exc}")
+        return _build_error_response(
+            request,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "internal-detection-error",
+            "Internal Detection Error",
+            "An unexpected error occurred while executing the AI detection engine.",
+        )
+

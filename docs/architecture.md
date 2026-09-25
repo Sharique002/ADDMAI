@@ -243,3 +243,58 @@ sequenceDiagram
 4. **Storage & Database Consistency:**
    - Ingestion is structured with rollback compensation: if database persistence fails due to infrastructure errors, the freshly uploaded storage object is deleted (`storage_service.delete_object`) to prevent orphan objects.
 
+---
+
+## 8. Stage 3: AI Detection Engine Architecture
+
+Stage 3 introduces localized, deep learning-based manipulation detection operating on canonical media assets produced by Stage 2.1.
+
+### 8.1 Inference Pipeline Sequence
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Analyst / Client
+    participant API as FastAPI Gateway (/media/{id}/detect)
+    participant Detect as Detection Service
+    participant Repo as Media Repository (PostgreSQL)
+    participant Storage as Object Storage (MinIO)
+    participant Pre as Image Preprocessor
+    participant Loader as Safe Model Loader
+    participant Engine as Inference Engine (PyTorch)
+    participant PredRepo as Prediction Repository (PostgreSQL)
+
+    Client->>API: POST /api/v1/media/{media_id}/detect
+    API->>Detect: detect(media_id, session)
+    Detect->>Repo: get_by_id(media_id)
+    alt Media Not Found
+        Repo-->>Detect: None
+        Detect-->>API: Raise MediaNotFoundError (HTTP 404)
+    else Unsupported Category (e.g. video)
+        Detect-->>API: Raise UnsupportedMediaCategoryError (HTTP 415)
+    else Valid Canonical Image Record
+        Detect->>Storage: get_object(storage_key)
+        Storage-->>Detect: canonical_bytes
+        Detect->>Detect: Verify SHA-256 before inference
+        Detect->>Pre: preprocess(canonical_bytes)
+        Pre-->>Detect: Tensor (1, 3, 224, 224)
+        Detect->>Loader: load_model()
+        Loader-->>Detect: ADDMAIDeepfakeDetector (verified safetensors)
+        Detect->>Engine: predict(tensor)
+        Engine-->>Detect: ModelOutput (prediction: REAL/DEEPFAKE, confidence)
+        Detect->>Detect: Verify SHA-256 after inference == SHA-256 before
+        Detect->>PredRepo: create(ModelPredictionRecord)
+        Detect-->>API: ModelPredictionResponse
+        API-->>Client: HTTP 200 OK + Structured Model Prediction
+    end
+```
+
+### 8.2 Model & Preprocessing Invariants
+1. **Model Architecture:** MesoNet-4 inspired Convolutional Neural Network (`ADDMAIDeepfakeDetector`) with 4 convolutional blocks, batch normalization, max pooling, dropout regularization, and a single-logit classification head.
+2. **Artifact Security:** Model weights are serialized in native `safetensors` format (`model.safetensors`, 98 KB), precluding arbitrary code execution vulnerabilities. The artifact checksum (`07059e48...`) is verified via SHA-256 prior to loading.
+3. **Deterministic Preprocessing:** Raw in-memory bytes are decoded safely under strict decompression bomb limits (`MAX_IMAGE_PIXELS = 100_000_000`), converted to RGB, bicubic resized to `256 x 256`, center-cropped to `224 x 224`, and normalized using ImageNet channel coefficients (`mean=[0.485, 0.456, 0.406]`, `std=[0.229, 0.224, 0.225]`).
+4. **Media Immutability Guarantee:** Preprocessing operates entirely on derived in-memory structures. The original storage object remains untouched, and the runtime guarantees:
+   $$\text{SHA-256}_{\text{before inference}} = \text{SHA-256}_{\text{after inference}}$$
+5. **Relational Persistence:** Predictions are stored in a dedicated `model_predictions` table linked 1:N with `media_records`. The canonical `media_records` entity is never mutated.
+6. **Strict Constitutional Boundary:** Stage 3 outputs strictly `MODEL PREDICTION` (`REAL` or `DEEPFAKE`). It does **NOT** generate final authenticity assessments (`LIKELY_AUTHENTIC`, `LIKELY_MANIPULATED`, `INCONCLUSIVE`). Those are reserved for future multi-signal Evidence Fusion.
+
+

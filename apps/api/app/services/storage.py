@@ -45,6 +45,11 @@ class StorageBackend(ABC):
         """Delete an object by key."""
         pass
 
+    @abstractmethod
+    async def get_object(self, key: str) -> Optional[bytes]:
+        """Retrieve stored raw byte data by key."""
+        pass
+
 
 class InMemoryStorageBackend(StorageBackend):
     """Deterministic in-memory storage backend for isolated unit testing."""
@@ -79,6 +84,9 @@ class InMemoryStorageBackend(StorageBackend):
             self._metadata.pop(key, None)
             return True
         return False
+
+    async def get_object(self, key: str) -> Optional[bytes]:
+        return self._storage.get(key)
 
 
 class S3MinIOStorageBackend(StorageBackend):
@@ -152,6 +160,16 @@ class S3MinIOStorageBackend(StorageBackend):
             except httpx.RequestError:
                 return False
 
+    async def get_object(self, key: str) -> Optional[bytes]:
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(self._get_url(key))
+                if resp.status_code == 200:
+                    return resp.content
+                return None
+            except httpx.RequestError:
+                return None
+
 
 class StorageService:
     """Service orchestrating object storage operations with deterministic keying."""
@@ -204,6 +222,10 @@ class StorageService:
     async def delete_object(self, key: str) -> bool:
         """Delete an object for transaction rollback / cleanup."""
         return await self._backend.delete(key)
+
+    async def get_object(self, key: str) -> Optional[bytes]:
+        """Retrieve stored raw bytes by canonical key."""
+        return await self._backend.get_object(key)
 
 
 storage_service = StorageService()

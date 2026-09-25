@@ -71,3 +71,20 @@ export interface MediaErrorResponse {
   instance: string;
 }
 
+export interface ModelInfo {
+  model_id: string;
+  version: string;
+}
+
+export interface ModelPredictionResponse {
+  media_id: string;
+  model: ModelInfo;
+  prediction: 'REAL' | 'DEEPFAKE';
+  confidence: number;
+  preprocessing_version: string;
+  inference_timestamp: string;
+  prediction_id?: string;
+  model_artifact_sha256?: string;
+}
+
+

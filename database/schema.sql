@@ -25,3 +25,21 @@ CREATE TABLE IF NOT EXISTS media_records (
 
 CREATE UNIQUE INDEX IF NOT EXISTS ix_media_records_sha256 ON media_records (sha256_digest);
 
+-- Table: model_predictions (Stage 3 AI Detection)
+CREATE TABLE IF NOT EXISTS model_predictions (
+    id UUID PRIMARY KEY,
+    media_id UUID NOT NULL REFERENCES media_records(id) ON DELETE CASCADE,
+    model_id VARCHAR(64) NOT NULL,
+    model_version VARCHAR(32) NOT NULL,
+    prediction VARCHAR(16) NOT NULL,
+    confidence DOUBLE PRECISION NOT NULL,
+    preprocessing_version VARCHAR(32) NOT NULL,
+    model_artifact_sha256 VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_model_predictions_prediction CHECK (prediction IN ('REAL', 'DEEPFAKE')),
+    CONSTRAINT ck_model_predictions_confidence_range CHECK (confidence >= 0.0 AND confidence <= 1.0)
+);
+
+CREATE INDEX IF NOT EXISTS ix_model_predictions_media_id ON model_predictions (media_id);
+
+

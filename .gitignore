@@ -67,9 +67,10 @@ checkpoints/
 weights/
 
 # Media Uploads & Local MinIO Data
-data/
-uploads/
-artifacts/
-minio-data/
-postgres-data/
-redis-data/
+/data/
+/uploads/
+/artifacts/
+/minio-data/
+/postgres-data/
+/redis-data/
+!ml/artifacts/

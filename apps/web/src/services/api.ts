@@ -8,6 +8,7 @@
 import {
   HealthResponse,
   MediaIngestionResponse,
+  ModelPredictionResponse,
   ReadyResponse,
 } from '../types';
 
@@ -100,6 +101,27 @@ class ApiService {
     }
 
     return data as MediaIngestionResponse;
+  }
+
+  /**
+   * Execute AI deepfake detection on media asset via POST /api/v1/media/{mediaId}/detect (Stage 3).
+   */
+  async detectMedia(mediaId: string): Promise<ModelPredictionResponse> {
+    const url = `${this.baseUrl}/api/v1/media/${encodeURIComponent(mediaId)}/detect`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      const errorMsg = data.detail || `AI detection failed with status HTTP ${response.status}`;
+      throw new Error(errorMsg);
+    }
+
+    return data as ModelPredictionResponse;
   }
 
   /**

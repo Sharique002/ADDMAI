@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import apiService from './services/api';
-import { HealthResponse, MediaIngestionResponse, ReadyResponse } from './types';
+import { HealthResponse, MediaIngestionResponse, ModelPredictionResponse, ReadyResponse } from './types';
 
 export const App: React.FC = () => {
   // System Health State
@@ -19,6 +19,28 @@ export const App: React.FC = () => {
   const [lookupId, setLookupId] = useState<string>('');
   const [lookupLoading, setLookupLoading] = useState<boolean>(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
+
+  // Stage 3 AI Detection State
+  const [detectionLoading, setDetectionLoading] = useState<boolean>(false);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
+  const [predictionResult, setPredictionResult] = useState<ModelPredictionResponse | null>(null);
+
+  const handleRunDetection = async (mediaId: string) => {
+    setDetectionLoading(true);
+    setDetectionError(null);
+    try {
+      const res = await apiService.detectMedia(mediaId);
+      setPredictionResult(res);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setDetectionError(err.message);
+      } else {
+        setDetectionError('AI detection failed.');
+      }
+    } finally {
+      setDetectionLoading(false);
+    }
+  };
 
   const runHealthCheck = async () => {
     setHealthLoading(true);
@@ -57,6 +79,8 @@ export const App: React.FC = () => {
 
     setUploadLoading(true);
     setUploadError(null);
+    setPredictionResult(null);
+    setDetectionError(null);
     try {
       const result = await apiService.uploadMedia(selectedFile);
       setIngestionResult(result);
@@ -80,6 +104,8 @@ export const App: React.FC = () => {
 
     setLookupLoading(true);
     setLookupError(null);
+    setPredictionResult(null);
+    setDetectionError(null);
     try {
       const result = await apiService.getMedia(lookupId.trim());
       setIngestionResult(result);
@@ -132,7 +158,7 @@ export const App: React.FC = () => {
                 border: '1px solid #334155',
               }}
             >
-              Stage 2.1: Ingestion &amp; Integrity Hardening
+              Stage 3: AI Detection Engine
             </span>
           </div>
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
@@ -363,6 +389,90 @@ export const App: React.FC = () => {
                   </pre>
                 </div>
               )}
+
+              {/* Stage 3: AI Model Prediction Section */}
+              <div style={{ borderTop: '1px solid #1e293b', paddingTop: '1.25rem', marginTop: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#f8fafc' }}>
+                      AI Deepfake Detection Engine (Stage 3)
+                    </h4>
+                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
+                      Execute localized convolutional model inference on canonical media bytes.
+                    </p>
+                  </div>
+                  {ingestionResult.media_category === 'image' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleRunDetection(ingestionResult.media_id)}
+                      disabled={detectionLoading}
+                      style={{
+                        backgroundColor: detectionLoading ? '#475569' : '#8b5cf6',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '0.375rem',
+                        padding: '0.45rem 1rem',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: detectionLoading ? 'not-allowed' : 'pointer',
+                        transition: 'background-color 0.2s',
+                      }}
+                    >
+                      {detectionLoading ? 'Analyzing...' : 'Run AI Detection'}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: '#f59e0b', backgroundColor: '#451a03', padding: '0.25rem 0.6rem', borderRadius: '0.25rem', border: '1px solid #78350f' }}>
+                      Video Detection Scheduled for Stage 4
+                    </span>
+                  )}
+                </div>
+
+                {detectionError && (
+                  <div style={{ padding: '0.6rem 0.85rem', backgroundColor: '#450a0a', border: '1px solid #991b1b', borderRadius: '0.375rem', color: '#fca5a5', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                    {detectionError}
+                  </div>
+                )}
+
+                {predictionResult && (
+                  <div style={{ backgroundColor: '#020617', border: '1px solid #334155', borderRadius: '0.5rem', padding: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', fontWeight: 600 }}>
+                          Model Prediction
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+                          <span
+                            style={{
+                              fontSize: '1.25rem',
+                              fontWeight: 800,
+                              color: predictionResult.prediction === 'DEEPFAKE' ? '#ef4444' : '#22c55e',
+                            }}
+                          >
+                            {predictionResult.prediction}
+                          </span>
+                          <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                            (Confidence: <strong style={{ color: '#f8fafc' }}>{(predictionResult.confidence * 100).toFixed(1)}%</strong>)
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', fontSize: '0.8rem', color: '#94a3b8' }}>
+                        <div>Model: <code style={{ color: '#38bdf8' }}>{predictionResult.model.model_id}</code></div>
+                        <div>Version: <code style={{ color: '#cbd5e1' }}>v{predictionResult.model.version}</code></div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', borderTop: '1px solid #1e293b', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Preprocessing: v{predictionResult.preprocessing_version}</span>
+                      <span>Analyzed: {new Date(predictionResult.inference_timestamp).toLocaleTimeString()}</span>
+                    </div>
+
+                    {/* Strict Constitutional Non-Verdict Disclaimer */}
+                    <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', backgroundColor: '#1e1b4b', border: '1px solid #4338ca', borderRadius: '0.375rem', fontSize: '0.75rem', color: '#c7d2fe' }}>
+                      <strong>Architectural Notice:</strong> This output represents an isolated AI model prediction, not the final ADDMAI authenticity assessment. Multi-signal evidence fusion, temporal consistency, and forensic signal verification will be evaluated in subsequent stages.
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </section>

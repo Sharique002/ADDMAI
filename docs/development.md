@@ -1,9 +1,9 @@
-# ADDMAI Development Guide (Stage 2.1 Hardened)
+# ADDMAI Development Guide (Stage 3: AI Detection Engine)
 
 This guide provides instructions for setting up, running, testing, and verifying the **ADDMAI** development environment.
 
 > [!NOTE]
-> **Stage 2.1 Scope:** This guide covers repository layout, local infrastructure (Docker Compose), backend API foundations, Alembic database migrations, media ingestion and integrity hardening, and frontend ingestion dashboard. Deepfake AI models, face detection, and forensic analysis algorithms will be introduced in subsequent stages.
+> **Stage 3 Scope:** This guide covers repository layout, local infrastructure (Docker Compose), backend API foundations, Alembic database migrations (`media_records`, `model_predictions`), media ingestion and integrity hardening, and the Stage 3 AI Deepfake Detection Engine with React analyst dashboard. Forensic analysis (ELA/FFT), temporal consistency, and multi-signal evidence fusion will be introduced in subsequent stages.
 
 ---
 
@@ -176,17 +176,18 @@ Alembic serves as the **sole authoritative mechanism** for database schema defin
   ```bash
   alembic revision --autogenerate -m "describe_change"
   ```
-- **Table Invariants (`media_records`):**
-  - All migrations maintain strict check constraints: `ck_media_records_size_bytes_non_negative` (`size_bytes >= 0`) and `ck_media_records_media_category` (`media_category IN ('image', 'video')`).
+- **Table Invariants:**
+  - `media_records`: `ck_media_records_size_bytes_non_negative` (`size_bytes >= 0`), `ck_media_records_media_category` (`media_category IN ('image', 'video')`).
+  - `model_predictions`: `ck_model_predictions_prediction` (`prediction IN ('REAL', 'DEEPFAKE')`), `ck_model_predictions_confidence_range` (`confidence >= 0.0 AND confidence <= 1.0`).
 
 ---
 
 ## 8. Testing & Verification
 
-### Running Automated Backend Tests (90 Tests)
-Run the complete backend test suite across unit, integrity, storage, concurrency, and API integration:
+### Running Automated Backend Tests (121 Tests)
+Run the complete backend test suite across unit, integrity, storage, concurrency, ML model, loader security, database, and API integration:
 ```bash
-python -m unittest tests/api/test_health.py tests/unit/test_config.py tests/unit/test_security_logging.py tests/unit/test_media_service.py tests/unit/test_media_storage.py tests/unit/test_media_integrity.py tests/unit/test_media_concurrency.py apps/api/tests/test_health.py apps/api/tests/test_media_api.py
+python -m unittest tests/api/test_health.py tests/unit/test_config.py tests/unit/test_security_logging.py tests/unit/test_media_service.py tests/unit/test_media_storage.py tests/unit/test_media_integrity.py tests/unit/test_media_concurrency.py apps/api/tests/test_health.py apps/api/tests/test_media_api.py tests/unit/test_ml_preprocessing.py tests/unit/test_ml_model.py tests/unit/test_ml_loader_security.py tests/unit/test_ml_database.py tests/unit/test_media_original_integrity.py apps/api/tests/test_media_detect_api.py
 ```
 
 ### Verifying Frontend Compilation
@@ -198,7 +199,7 @@ npm run build
 
 ---
 
-## 8. Service Ports Reference
+## 9. Service Ports Reference
 
 | Service | Internal Port | Host Port | Protocol | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
