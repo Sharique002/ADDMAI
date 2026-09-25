@@ -166,3 +166,80 @@ stateDiagram-v2
 - **Probes:**
   - `GET /api/v1/health`: Liveness probe indicating service execution.
   - `GET /api/v1/ready`: Readiness probe validating PostgreSQL, Redis, and MinIO connectivity.
+
+---
+
+## 7. Stage 2: Media Ingestion & Cryptographic Integrity Architecture
+
+Stage 2 establishes the cryptographic and storage intake foundation for all incoming media assets prior to downstream analysis.
+
+### 7.1 Ingestion Pipeline Sequence
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Analyst / Client
+    participant API as FastAPI Gateway
+    participant Ingest as Media Ingestion Service
+    participant Validator as Media Type Validator
+    participant Hasher as SHA-256 Hasher
+    participant Storage as Object Storage (MinIO)
+    participant Repo as Media Repository (PostgreSQL)
+    participant Inspector as Container Inspector
+
+    Client->>API: POST /api/v1/media (Multipart file)
+    API->>Ingest: ingest_media(content, filename, mime)
+    Ingest->>Validator: Validate extension, magic bytes, size (< 25MB)
+    Validator-->>Ingest: Validated MediaTypeDef
+    Ingest->>Hasher: calculate_sha256(content)
+    Hasher-->>Ingest: 64-char lowercase hex digest
+
+    Ingest->>Repo: get_by_sha256(digest)
+    alt SHA-256 already exists (Deduplication)
+        Repo-->>Ingest: Existing MediaRecord
+        Ingest->>Inspector: Inspect container safely
+        Ingest-->>API: Return existing record (is_duplicate: True)
+        API-->>Client: HTTP 200 OK + Structured Record
+    else New Unique Asset
+        Ingest->>Storage: store_original(digest, bytes, mime, filename)
+        Storage-->>Ingest: Storage key: media/original/{digest}
+        Ingest->>Repo: create(MediaRecord) + Commit Transaction
+        alt Database Commit Fails
+            Ingest->>Storage: delete_object(key) [Rollback Cleanup]
+            Ingest-->>API: Raise IngestionError
+            API-->>Client: HTTP 500 RFC-7807 Error
+        else Database Commit Succeeds
+            Ingest->>Inspector: inspect_media_container(category, bytes)
+            Ingest-->>API: (MediaRecord, AnalysisRecord, is_duplicate: False)
+            API-->>Client: HTTP 201 Created + Structured Analysis Record
+        end
+    end
+```
+
+### 7.2 Core Architectural Invariants
+1. **Byte Preservation:** Raw bytes received over HTTP are preserved verbatim without re-encoding, transcoding, resizing, or EXIF stripping.
+2. **Deterministic SHA-256 Digest:** Exactly 64 lowercase hexadecimal characters computed directly from original bytes. Serves as the immutable cryptographic identity of the asset.
+3. **Canonical Deduplication Invariant:**
+   $$\text{ONE SHA-256 Digest} \longrightarrow \text{ONE Canonical Original Object}$$
+   If an uploaded file matches an existing SHA-256 digest, no duplicate storage object is created in MinIO, and no duplicate database record is created. The existing record is returned with `is_duplicate: true`.
+4. **Deterministic Storage Keying:** Canonical object path pattern: `media/original/{sha256_digest}`.
+5. **Neutral Forensic Observations:** Container properties (dimensions, duration, codecs, EXIF presence) are recorded purely as neutral observations. No authenticity verdicts or manipulation scores are generated.
+
+### 7.3 Stage 2.1 Hardening Specifications
+
+1. **Schema Authority & Table Invariants:**
+   - **Alembic Authority:** Alembic migrations (`database/migrations/versions/`) represent the sole authoritative schema definition. `database/schema.sql` serves strictly as Docker bootstrap.
+   - **Database Check Constraints:**
+     - `ck_media_records_size_bytes_non_negative`: Enforces `size_bytes >= 0` at the database engine level.
+     - `ck_media_records_media_category`: Restricts `media_category IN ('image', 'video')`.
+2. **Concurrent Deduplication Race Handling:**
+   - Database-level unique constraint on `sha256_digest` provides ACID serialization for simultaneous ingestion of identical payloads.
+   - When concurrent requests race to persist the same digest, the losing transaction triggers an `IntegrityError`, executes an explicit `session.rollback()`, queries the canonical winning record, and returns it with `is_duplicate: true`.
+   - The shared object storage key (`media/original/{sha256}`) is preserved without deletion during deduplication recovery.
+3. **Defensive Parsing & Resource Boundaries:**
+   - **Filename Sanitization:** Strips directory traversal sequences (`../`, `..\`), absolute paths, null bytes (`\x00`), and non-alphanumeric punctuation while enforcing a 255-character bound.
+   - **Pillow Image Safety:** Disables truncated image recovery (`ImageFile.LOAD_TRUNCATED_IMAGES = False`), caps image pixels at 100M (`Image.MAX_IMAGE_PIXELS = 100_000_000`), and catches `DecompressionBombError` to prevent memory exhaustion.
+   - **Bounded MP4 Container Parser:** Implements a pure-Python box parser with an iteration cap of 500 boxes and strict boundary validation against buffer overflow or infinite box recursion.
+   - **Streaming Size Enforcement:** Request bodies are inspected via `Content-Length` headers and consumed in bounded 1 MB chunks to enforce the 25 MB inclusive limit before memory buffering.
+4. **Storage & Database Consistency:**
+   - Ingestion is structured with rollback compensation: if database persistence fails due to infrastructure errors, the freshly uploaded storage object is deleted (`storage_service.delete_object`) to prevent orphan objects.
+

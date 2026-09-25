@@ -1,8 +1,8 @@
-"""Typed configuration management for ADDMAI API (Stage 1.1 Hardened).
+"""Typed configuration management for ADDMAI API (Stage 2 Hardened).
 
-Conforms to Section 10 (Configuration Hardening) of Stage 1.1 specification.
-Enforces typed settings, prevents wildcard CORS, and prohibits insecure default
-development credentials in production mode.
+Conforms to Section 6 & 10 of Stage 2 specifications.
+Enforces typed settings, media upload limits, prevents wildcard CORS,
+and prohibits insecure default development credentials in production mode.
 """
 
 from functools import lru_cache
@@ -18,7 +18,7 @@ INSECURE_DEV_MINIO_CRED = "minioadmin"
 
 
 class Settings(BaseSettings):
-    """Typed backend settings conforming to Stage 1.1 specifications."""
+    """Typed backend settings conforming to Stage 2 specifications."""
 
     # Application Identity
     APP_NAME: str = Field(default="ADDMAI API", description="Service display name")
@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     APP_VERSION: str = Field(default="0.1.0", description="Semver release")
     API_V1_STR: str = Field(default="/api/v1", description="API version prefix")
     LOG_LEVEL: str = Field(default="INFO", description="Standard logging level")
+
+    # Media Ingestion Limits (Section 6)
+    MEDIA_MAX_UPLOAD_SIZE_MB: int = Field(default=25, description="Maximum allowed media upload size in megabytes")
+
+    @property
+    def media_max_upload_size_bytes(self) -> int:
+        """Maximum media size in bytes."""
+        return self.MEDIA_MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
     # PostgreSQL Relational Database Configuration
     POSTGRES_USER: str = Field(default="addmai", description="PostgreSQL database user")
@@ -74,7 +82,7 @@ class Settings(BaseSettings):
         else:
             raise ValueError(f"Invalid type for CORS_ALLOWED_ORIGINS: {type(v)}")
 
-        # Hardened security check: Wildcard '*' is prohibited in all environments (Section 10)
+        # Hardened security check: Wildcard '*' is prohibited in all environments
         if any(origin.strip() == "*" for origin in origins):
             raise ValueError("Wildcard CORS origin '*' is strictly prohibited for security compliance.")
 
@@ -82,7 +90,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_credentials(self) -> "Settings":
-        """Disallow default development credentials in production environment (Section 10)."""
+        """Disallow default development credentials in production environment."""
         if self.APP_ENV.lower() == "production":
             # Check database credentials
             if (

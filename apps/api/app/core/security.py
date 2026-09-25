@@ -18,34 +18,53 @@ def generate_request_id() -> str:
     return f"req_{uuid.uuid4().hex[:16]}"
 
 
-def sanitize_filename(filename: str) -> str:
+def sanitize_filename(filename: str, max_length: int = 255) -> str:
     """Sanitize user-provided filename to prevent path traversal and null-byte injection.
 
     Ensures:
     - Null bytes are stripped.
-    - Directory separators and path traversal are removed via basename extraction.
-    - Only safe alphanumeric, underscore, hyphen, and period characters are kept.
+    - Directory separators and path traversal are removed across Unix and Windows.
+    - Drive letters (e.g., C:) are stripped.
+    - Safe alphanumeric, unicode word characters, underscores, hyphens, and periods are kept.
     - Multiple consecutive dots are collapsed.
     - Empty, space-only, or dot/underscore-only strings safely default to 'unnamed_asset'.
+    - Stored length is strictly bounded to max_length (default 255) while preserving extension.
     """
     if not filename or not isinstance(filename, str) or not filename.strip():
         return "unnamed_asset"
 
     # 1. Strip null bytes
-    clean = filename.replace("\x00", "")
+    clean = filename.replace("\x00", "").strip()
 
-    # 2. Extract basename to defeat path traversal (e.g., ../ or C:\)
-    clean = os.path.basename(clean.strip())
+    # 2. Normalize Windows drive letters and separators
+    clean = re.sub(r"^[a-zA-Z]:", "", clean)
+    clean = clean.replace("\\", "/")
 
-    # 3. Filter non-whitelisted characters
-    clean = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", clean)
+    # 3. Extract basename (last path component)
+    clean = clean.split("/")[-1]
 
-    # 4. Collapse consecutive dots
+    # 4. Filter disallowed characters while preserving Unicode words
+    clean = re.sub(r"[^\w\-\.]", "_", clean, flags=re.UNICODE)
+
+    # 5. Collapse consecutive dots
     clean = re.sub(r"\.{2,}", ".", clean)
 
-    # 5. Strip leading/trailing dots, underscores, and whitespace
+    # 6. Strip leading/trailing dots, underscores, and whitespace
     clean_stripped = clean.strip(". _")
     if not clean_stripped:
         return "unnamed_asset"
 
-    return clean.strip(". ") or "unnamed_asset"
+    clean = clean_stripped
+
+    # 7. Bound length to max_length preserving extension
+    if len(clean) > max_length:
+        parts = clean.rsplit(".", 1)
+        if len(parts) == 2 and len(parts[1]) <= 10:
+            ext = "." + parts[1]
+            stem = parts[0][: max_length - len(ext)]
+            clean = stem.rstrip(". _") + ext
+        else:
+            clean = clean[:max_length].rstrip(". _")
+
+    return clean or "unnamed_asset"
+

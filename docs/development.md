@@ -1,9 +1,9 @@
-# ADDMAI Development Guide (Stage 1.1 Hardened)
+# ADDMAI Development Guide (Stage 2.1 Hardened)
 
 This guide provides instructions for setting up, running, testing, and verifying the **ADDMAI** development environment.
 
 > [!NOTE]
-> **Stage 1.1 Scope:** This guide covers repository layout, local infrastructure (Docker Compose), backend API foundations, dependency strategies, and frontend shell development. Deepfake AI models, media ingestion pipelines, and forensic algorithms will be introduced in subsequent stages.
+> **Stage 2.1 Scope:** This guide covers repository layout, local infrastructure (Docker Compose), backend API foundations, Alembic database migrations, media ingestion and integrity hardening, and frontend ingestion dashboard. Deepfake AI models, face detection, and forensic analysis algorithms will be introduced in subsequent stages.
 
 ---
 
@@ -65,30 +65,47 @@ pip install -e .[dev]
 ADDMAI/
 ├── apps/
 │   ├── api/             # FastAPI backend service
-│   │   ├── app/         # Application modules (api, core, schemas, services)
-│   │   │   ├── api/v1/health.py    # Thin HTTP route definitions
-│   │   │   ├── services/health.py  # Decoupled dependency readiness logic
-│   │   │   ├── core/config.py      # Hardened Pydantic settings
-│   │   │   └── main.py             # FastAPI entrypoint
-│   │   ├── tests/       # Backend unit test suite
+│   │   ├── app/         # Application modules
+│   │   │   ├── api/v1/  # Health and Media REST routes
+│   │   │   │   ├── health.py
+│   │   │   │   └── media.py
+│   │   │   ├── core/    # Config, logging, security, media_types registry
+│   │   │   ├── db/      # Async database engine & session dependency
+│   │   │   ├── models/  # SQLAlchemy models (media_records)
+│   │   │   ├── repositories/ # Media data access repositories
+│   │   │   ├── schemas/ # Pydantic schemas (MediaIngestionResponse, etc.)
+│   │   │   ├── services/# Domain services:
+│   │   │   │   ├── health.py
+│   │   │   │   ├── media_ingestion.py
+│   │   │   │   ├── media_inspection.py
+│   │   │   │   ├── metadata.py
+│   │   │   │   └── storage.py
+│   │   │   └── main.py  # FastAPI entrypoint
+│   │   ├── tests/       # Health & Media API integration tests
 │   │   └── Dockerfile   # Pinned Python 3.11.9-slim container
 │   └── web/             # React + TypeScript frontend dashboard
-│       ├── src/         # UI components & apiService abstraction
+│       ├── src/         # UI components, Ingestion UI & apiService abstraction
 │       └── Dockerfile   # Pinned Node 20.12.2-alpine container
 ├── ml/                  # Machine learning models (Stage 3 & 4)
 ├── forensic/            # Forensic signal extractors (Stage 5)
 ├── provenance/          # C2PA provenance parser (Stage 5)
 ├── worker/              # Background analysis task workers (Stage 8)
-├── database/            # Relational database schemas & migrations (Stage 3)
-├── tests/               # Multi-module and end-to-end test runners
+├── database/            # Database schema & migrations
+│   ├── migrations/      # Alembic migration versions
+│   └── schema.sql       # Reference SQL schema (media_records)
+├── tests/               # Unit and integrity test suites
+│   ├── unit/            # Media integrity, validation, and service tests
+│   └── api/             # Route integration tests
 ├── infra/               # Deployment and container orchestration manifests
 ├── scripts/             # Developer automation utilities
 ├── docs/                # Architecture and design documentation
 ├── docker-compose.yml   # Multi-service development stack (pinned versions)
+├── alembic.ini          # Database migration configuration
 ├── Makefile             # Automation commands
 ├── pyproject.toml       # Python package configuration (Authoritative)
 └── README.md            # Project introduction and roadmap status
 ```
+
 
 ---
 
@@ -147,17 +164,29 @@ Open `http://localhost:5173` in your browser.
 
 ---
 
-## 7. Testing & Verification
+## 7. Database Migrations & Schema Evolution
 
-### Running Automated Backend Tests
-Run all unit and API test suites:
+Alembic serves as the **sole authoritative mechanism** for database schema definition and migration.
+
+- **Apply Migrations:**
+  ```bash
+  alembic upgrade head
+  ```
+- **Generate New Migration:**
+  ```bash
+  alembic revision --autogenerate -m "describe_change"
+  ```
+- **Table Invariants (`media_records`):**
+  - All migrations maintain strict check constraints: `ck_media_records_size_bytes_non_negative` (`size_bytes >= 0`) and `ck_media_records_media_category` (`media_category IN ('image', 'video')`).
+
+---
+
+## 8. Testing & Verification
+
+### Running Automated Backend Tests (90 Tests)
+Run the complete backend test suite across unit, integrity, storage, concurrency, and API integration:
 ```bash
-python -m unittest discover -s apps/api/tests
-python -m unittest discover -s tests
-```
-Or via `pytest` (if installed):
-```bash
-pytest
+python -m unittest tests/api/test_health.py tests/unit/test_config.py tests/unit/test_security_logging.py tests/unit/test_media_service.py tests/unit/test_media_storage.py tests/unit/test_media_integrity.py tests/unit/test_media_concurrency.py apps/api/tests/test_health.py apps/api/tests/test_media_api.py
 ```
 
 ### Verifying Frontend Compilation
